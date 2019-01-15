@@ -19,7 +19,7 @@ const request = requestFactory({
   // this allows request-promise to keep cookies between requests
   jar: true
 })
-var cache = [];
+
 const baseUrl = 'https://eticket-app.qiis.fr'
 
 module.exports = new BaseKonnector(start)
@@ -37,8 +37,8 @@ async function start(fields) {
   // cheerio (https://cheerio.js.org/) uses the same api as jQuery (http://jquery.com/)
   log('info', 'Parsing list of documents')
 
-  var documents = [];
-  
+  var documents = []
+
   documents = await parseDocuments($)
 
   // here we use the saveBills function even if what we fetch are not bills, but this is the most
@@ -49,16 +49,15 @@ async function start(fields) {
     // identifiers should be at least a word found in the title of a bank operation related to this
     // bill. It is not case sensitive.
     identifiers: ['etickets']
-  });
-
+  })
 
   // recuperation des attestations fiscales
   documents = parseAttestationsFiscales($)
-  log('info','Saving tax data to Cozy');
+  log('info', 'Saving tax data to Cozy')
 
   await saveFiles(documents, fields, {
-      timeout: Date.now () + 300 * 1000
-    });
+    timeout: Date.now() + 300 * 1000
+  })
 }
 
 // this shows authentication using the [signin function](https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#module_signin)
@@ -67,7 +66,7 @@ function authenticate(username, password) {
   return signin({
     url: `https://eticket.qiis.fr/`,
     formSelector: 'form',
-    formData: {email: username,password: password },
+    formData: { email: username, password: password },
     // the validate function will check if the login request was a success. Every website has
     // different ways respond: http status code, error message in html ($), http redirection
     // (fullResponse.request.uri.href)...
@@ -105,9 +104,8 @@ function parseDocuments($) {
         sel: 'td:nth-child(4)',
         parse: normalizePrice
       },
-      filename:{
-        sel: 'td:nth-child(2)',
-        parse: name => `${name}.pdf`
+      filename: {
+        sel: 'td:nth-child(2)'
       },
       fileurl: {
         sel: 'td:nth-child(5) a',
@@ -118,7 +116,7 @@ function parseDocuments($) {
         sel: 'td:nth-child(1)'
       },
       reference: {
-       sel: 'td:nth-child(2)'
+        sel: 'td:nth-child(2)'
       }
     },
     '#PANEL table tbody tr:not(.facture_header)'
@@ -131,6 +129,11 @@ function parseDocuments($) {
     date: normalizeDate(doc.date),
     currency: '€',
     vendor: 'eTickets',
+    filename: normalizeFileName(
+      normalizeDate(doc.date),
+      doc.amount,
+      doc.reference
+    ),
     metadata: {
       // it can be interesting that we add the date of import. This is not mandatory but may be
       // useful for debugging or data migration
@@ -143,54 +146,66 @@ function parseDocuments($) {
 
 // convert a price string to a float
 function normalizePrice(price) {
-  price = price.replace(new RegExp(' ', 'g'),'');
-  price = price.replace(new RegExp(',', 'g'),'.');
+  price = price.replace(new RegExp(' ', 'g'), '')
+  price = price.replace(new RegExp(',', 'g'), '.')
 
-  price = price.trim();
+  price = price.trim()
   return parseFloat(price)
 }
 
 // "Parse" the date found in the bill page and return a JavaScript Date object.
 function normalizeDate(date) {
+  const [day, month, year] = date.split('/')
 
- const [day, month, year] = date.split('/')
+  let sDate = '20' + year.trim() + '-' + month.trim() + '-' + day.trim()
 
- sDate = '20' + year.trim() +'-' + month.trim() +'-' + day.trim();
-
- return new Date(sDate)
+  return new Date(sDate)
 }
 
+function parseAttestationsFiscales($) {
+  var tabLiens = $('#PANEL>a')
+  var documents = []
+  log('info', tabLiens.length)
+  for (var i = 0; i < tabLiens.length; i++) {
+    var sTitre = tabLiens[i].children[0].data
 
-function parseAttestationsFiscales($)
-{
-  var tabLiens = $('#PANEL>a');
-  var documents= [];
-  log('info',tabLiens.length);
-  for (i=0;i < tabLiens.length; i++)
-  {
+    sTitre = 'Attestation_fiscale_' + normalizeTitre(sTitre.trim())
 
-    sTitre = tabLiens[i].children[0].data;
+    var sFileURL = baseUrl + '/famille/factures/' + tabLiens[i].attribs.href
+    var sFileName = sTitre + '.pdf'
 
-    sTitre = 'Attestation_fiscale_' + normalizeTitre(sTitre.trim());
-
-    sFileURL = baseUrl + '/famille/factures/' + tabLiens[i].attribs.href;
-    sFileName = sTitre + '.pdf'
-
-    documents.push({title:sTitre,fileurl:sFileURL, filename:sFileName});
-
+    documents.push({ title: sTitre, fileurl: sFileURL, filename: sFileName })
   }
 
-  return documents;
-
+  return documents
 }
-function normalizeTitre(sTitle)
-{
- log('info','titre :' + sTitle);
+function normalizeTitre(sTitle) {
+  log('info', 'titre :' + sTitle)
 
-  var regex1 = new RegExp('[0-9]+','y');
-  if (regex1.test(sTitle))
-    return sTitle;
-  else
-    return (new Date()).getFullYear();
+  var regex1 = new RegExp('[0-9]+', 'y')
+  if (regex1.test(sTitle)) return sTitle
+  else return new Date().getFullYear()
+}
 
+function normalizeFileName(dDate, mMontant, sReference) {
+  /*2018-01-02_edf_35.50€_345234.pdf
+YYYY-MM-DD_vendor_amount.toFixed(2)currency_reference.pdf
+*/
+  return (
+    formatDate(dDate) + '_eTickets_' + mMontant + '€_' + sReference + '.pdf'
+  )
+}
+
+// Convert a Date object to a ISO date string
+function formatDate(date) {
+  let year = date.getFullYear()
+  let month = date.getMonth() + 1
+  let day = date.getDate()
+  if (month < 10) {
+    month = '0' + month
+  }
+  if (day < 10) {
+    day = '0' + day
+  }
+  return `${year}-${month}-${day}`
 }

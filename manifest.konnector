@@ -1,10 +1,10 @@
 {
   "version": "1.0.0",
-  "name": "eTickets Connector",
+  "name": "eTicket",
   "type": "konnector",
   "language": "node",
   "icon": "icon.png",
-  "slug": "eTickets",
+  "slug": "eticket",
   "source": "https://github.com/konnectors/eticket.git",
   "editor": "Marc Polycarpe",
   "vendor_link": "https://eticket.qiis.fr/",
@@ -49,8 +49,8 @@
   "langs": ["fr", "en"],
   "locales": {
     "fr": {
-      "short_description": "Connecteur eTickets",
-      "long_description": "Ce connecteur permet de récupérer les factures eTickets ainsi que les attestations fiscales",
+      "short_description": "Connecteur eTicket",
+      "long_description": "Ce connecteur permet de récupérer les factures eTicket ainsi que les attestations fiscales",
       "permissions": {
         "bank operations": {
           "description": "Utilisé pour relier les factures à des operations bancaires"
@@ -67,8 +67,8 @@
       }
     },
     "en": {
-      "short_description": "eTickets Connector",
-      "long_description": "This connector fetches eTickets bills and tax documents",
+      "short_description": "eTicket Connector",
+      "long_description": "This connector fetches eTicket bills and tax documents",
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"

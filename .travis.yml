@@ -1,0 +1,41 @@
+language: node_js
+node_js:
+- '8'
+env:
+  global:
+  - GH_USER_EMAIL="travis@example.org"
+  - GH_USER_NAME="cozy-bot"
+  - DEPLOY_REPOSITORY="git@github.com:konnectors/eticket.git"
+  - secure: JNjcOKeVBMzQCvs3cf8tfcm3jqCPqGTMwW7ROk34ujeCzPlcqTdfpdBRLCXJSjjkMpyCtTL1Tia8SdnUcKag5BbGiMoOZnhZBPpXAONewh+bCv+xg7xyJql/VYmgpsQtylzxnMbMc3p1LgTZqfYIqB+EVSGqIufQy9hImBxZZtudRbpP6s4/V+RV1J91fnr7BUQGeoUCkfqjawNUg0D1h5XGBhA09xSLvznNAA+k+OWRuMyq7FHkDjtKSww0UkF6huS8BDMk06Cmt8XzTTvOCodGZjg7DgckMT9QBTluWHHw5Eib2qF/FiVo2gpPDa5SOeauHmAce+wDUsPC1rNbfSUCY4j8TISlA/PcGQtIPHxU4icJosKTnDshQrWfaDfp4iHPqpZ8jD/3ofNqhtom66lqPulEF2hgYDIzoyo/T1wEbzCT4flqK1q0rzOKrq8V1AANxzC8Yx3yzNXqV1YRT3JvGGWdXNfOvhb2a3SgAgzJtlTCj7B7HAKdvMGCw94fEKo0/157RUhMlX1HQI6pU/b4Hgrd2iDF8HNR9QCMeq33CYJ1oU9MCLi0F4PbU4l1NGifkmXz2SId2IWM+ln/3b1ZCzX06dHt/tE40mlrTUBPnicP7ew13TpxZvJnoe3kN674dYLclyGm+U7G824d90CPZBeDzp8jErAdHSaYJP8=
+cache:
+  yarn: true
+  directories:
+  - node_modules
+branches:
+  except:
+  - build
+  - build-debug
+script:
+- yarn lint
+- yarn build
+- yarn run check
+deploy:
+- provider: script
+  skip-cleanup: true
+  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish
+  on:
+    branch: master
+- provider: script
+  skip-cleanup: true
+  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish
+  on:
+    tags: true
+before_install:
+- openssl aes-256-cbc -K $encrypted_1e206f84ce3b_key -iv $encrypted_1e206f84ce3b_iv
+  -in github_deploy_key.enc -out /tmp/github_deploy_key -d
+- eval "$(ssh-agent -s)"
+- chmod 600 /tmp/github_deploy_key
+- ssh-add /tmp/github_deploy_key
+after_deploy:
+- rm /tmp/github_deploy_key
+- ssh-add -D

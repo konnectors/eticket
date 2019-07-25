@@ -1,11 +1,11 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0",
   "name": "eTicket",
   "type": "konnector",
   "language": "node",
   "icon": "icon.svg",
   "slug": "eticket",
-  "source": "https://github.com/konnectors/eticket.git",
+  "source": "git@github.com:konnectors/eticket.git",
   "editor": "Marc Polycarpe",
   "vendor_link": "https://eticket.qiis.fr/",
   "categories": [

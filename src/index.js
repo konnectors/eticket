@@ -23,185 +23,375 @@ const request = requestFactory({
   // this allows request-promise to keep cookies between requests
   jar: true
 })
+var WebSocketClient = require('websocket').client;
+const stream = require('stream')
 
 const baseUrl = 'https://eticket-app.qiis.fr'
+const UrlWebsocket = 'wss://s-usc1c-nss-394.firebaseio.com/.ws?v=5&ns=qiis-eticket-production';
 
-module.exports = new BaseKonnector(start)
+class eTicketKonnector extends BaseKonnector
+{
 
-// The start function is run by the BaseKonnector instance only when it got all the account
-// information (fields). When you run this connector yourself in "standalone" mode or "dev" mode,
-// the account information come from ./konnector-dev-config.json file
-async function start(fields) {
-  log('info', 'Authenticating ...')
-  await authenticate(fields.login, fields.password)
-  log('info', 'Successfully logged in')
-  // The BaseKonnector instance expects a Promise as return of the function
-  log('info', 'Fetching the list of documents')
-  const $ = await request(`${baseUrl}/famille/factures/`)
-  // cheerio (https://cheerio.js.org/) uses the same api as jQuery (http://jquery.com/)
-  log('info', 'Parsing list of documents')
+  constructor() {
+    super()
+    this.request = requestFactory({
+      // debug: 'json',
+      cheerio: false,
+      json: true,
+      jar: true
+    })
+    this.wsClient = new WebSocketClient();
+    this.metaManagerId = "" // Identifiant client
+    this.familyID = ""
+    this.customToken = "" // le token personnalisé
+    this.tokenId = ""     // Le token d'identification
+    this.wsConnection = null;
+    this.numQuestion = 0
 
-  var documents = []
+    // Configure le websocket
+    this._ConfigureWebsocket()
 
-  documents = await parseDocuments($)
+    // Evénéments que l'on doit gérer pour le websocket
+    this.webSocketConnecte = false;
+    this.webSocketErreurConnexion = false;
+    this.webSocketAuthentifie = false;
+    this.documentsRecuperes = false;
+    this.documents = []
+    this.taAnswer = []
+    this.nbPaquetsAttendus = 0
+    this.dernierPaquet = ""
 
-  // here we use the saveBills function even if what we fetch are not bills, but this is the most
-  // common case in connectors
-  log('info', 'Saving data to Cozy')
-  await saveBills(documents, fields, {
-    // this is a bank identifier which will be used to link bills to bank operations. These
-    // identifiers should be at least a word found in the title of a bank operation related to this
-    // bill. It is not case sensitive.
-    identifiers: ['etickets']
-  })
-
-  // recuperation des attestations fiscales
-  documents = parseAttestationsFiscales($)
-  log('info', 'Saving tax data to Cozy')
-
-  await saveFiles(documents, fields, {
-    timeout: Date.now() + 300 * 1000
-  })
-}
-
-// this shows authentication using the [signin function](https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#module_signin)
-// even if this in another domain here, but it works as an example
-function authenticate(username, password) {
-  return signin({
-    url: `https://eticket.qiis.fr/`,
-    formSelector: 'form',
-    formData: { email: username, password: password },
-    // the validate function will check if the login request was a success. Every website has
-    // different ways respond: http status code, error message in html ($), http redirection
-    // (fullResponse.request.uri.href)...
-    validate: (statusCode, $, fullResponse) => {
-      log(
-        'debug',
-        fullResponse.request.uri.href,
-        'not used here but should be usefull for other connectors'
-      )
-      // The login in toscrape.com always works excepted when no password is set
-      if ($(`a[href='/logout']`).length === 1) {
-        return true
-      } else {
-        // cozy-konnector-libs has its own logging function which format these logs with colors in
-        // standalone and dev mode and as JSON in production mode
-        log('error', $('.error').text())
-        return false
-      }
-    }
-  })
-}
-
-// The goal of this function is to parse a html page wrapped by a cheerio instance
-// and return an array of js objects which will be saved to the cozy by saveBills (https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#savebills)
-function parseDocuments($) {
-  // you can find documentation about the scrape function here :
-  // https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#scrape
-  const docs = scrape(
-    $,
-    {
-      title: {
-        sel: 'td:nth-child(3)'
-      },
-      amount: {
-        sel: 'td:nth-child(4)',
-        parse: normalizePrice
-      },
-      filename: {
-        sel: 'td:nth-child(2)'
-      },
-      fileurl: {
-        sel: 'td:nth-child(5) a',
-        attr: 'href',
-        parse: src => `${baseUrl}/famille/factures/${src}`
-      },
-      date: {
-        sel: 'td:nth-child(1)'
-      },
-      reference: {
-        sel: 'td:nth-child(2)'
-      }
-    },
-    '#PANEL table tbody tr:not(.facture_header)'
-  )
-
-  return docs.map(doc => ({
-    ...doc,
-    // the saveBills function needs a date field
-    // even if it is a little artificial here (these are not real bills)
-    date: normalizeDate(doc.date),
-    currency: '€',
-    vendor: 'eTickets',
-    filename: normalizeFileName(
-      normalizeDate(doc.date),
-      doc.amount,
-      doc.reference
-    ),
-    metadata: {
-      // it can be interesting that we add the date of import. This is not mandatory but may be
-      // useful for debugging or data migration
-      importDate: new Date(),
-      // document version, useful for migration after change of document structure
-      version: 1
-    }
-  }))
-}
-
-// convert a price string to a float
-function normalizePrice(price) {
-  price = price.replace(new RegExp(' ', 'g'), '')
-  price = price.replace(new RegExp(',', 'g'), '.')
-
-  price = price.trim()
-  return parseFloat(price)
-}
-
-// "Parse" the date found in the bill page and return a JavaScript Date object.
-function normalizeDate(date) {
-  const [day, month, year] = date.split('/')
-
-  let sDate = '20' + year.trim() + '-' + month.trim() + '-' + day.trim()
-
-  return new Date(sDate)
-}
-
-function parseAttestationsFiscales($) {
-  var tabLiens = $('#PANEL>a')
-  var documents = []
-  log('info', tabLiens.length)
-  for (var i = 0; i < tabLiens.length; i++) {
-    var sTitre = tabLiens[i].children[0].data
-
-    sTitre = 'Attestation_fiscale_' + normalizeTitre(sTitre.trim())
-
-    var sFileURL = baseUrl + '/famille/factures/' + tabLiens[i].attribs.href
-    var sFileName = sTitre + '.pdf'
-
-    documents.push({ title: sTitre, fileurl: sFileURL, filename: sFileName })
   }
 
-  return documents
-}
-function normalizeTitre(sTitle) {
-  log('info', 'titre :' + sTitle)
+  // The start function is run by the BaseKonnector instance only when it got all the account
+// information (fields). When you run this connector yourself in "standalone" mode or "dev" mode,
+// the account information come from ./konnector-dev-config.json file
+  async fetch (fields) {
+  
+    log('info', 'Authenticating ...')
+  
+    await this.authenticate(fields.login, fields.password)
 
-  var regex1 = new RegExp('[0-9]+', 'y')
-  if (regex1.test(sTitle)) return sTitle
-  else return new Date().getFullYear()
+    log('info', 'Successfully logged in')
+    // The BaseKonnector instance expects a Promise as return of the function
+    log('info', 'Fetching the list of documents')
+    // On crée la websocket client
+
+    // cheerio (https://cheerio.js.org/) uses the same api as jQuery (http://jquery.com/)
+    log('info', 'Parsing list of documents')
+
+    var documents = []
+
+    documents = await this.parseBills()
+
+    // here we use the saveBills function even if what we fetch are not bills, but this is the most
+    // common case in connectors
+    log('info', 'Saving data to Cozy')
+    await saveBills(documents, fields, {
+      // this is a bank identifier which will be used to link bills to bank operations. These
+      // identifiers should be at least a word found in the title of a bank operation related to this
+      // bill. It is not case sensitive.
+      identifiers: ['etickets']
+    })
+
+    // recuperation des documents divers
+    documents = await this.parseDocuments()
+    log('info', 'Saving documents to Cozy')
+
+    await saveFiles(documents, fields, {
+      timeout: Date.now() + 300 * 1000,
+      validateFile: function() {return true;}
+    })
+
+    // On se déconnecte
+    this.wsConnection.close()
 }
 
-function normalizeFileName(dDate, mMontant, sReference) {
+async authenticate(username, password) {
+  // On se connecte
+  var options = {
+    uri:"https://eticket-app.qiis.fr/api/v1/auth/login?login="+username+"&password="+ password+"&requestFirebaseCustomToken=true",
+    method : 'GET'
+  }
+
+  // On s'identifie
+  await this.request(options, (function (error, response, body) {
+    if (body.status == 'Success'){
+      // Sauvegarde des informations nécessaires
+      // Le token d'identification
+      log('debug', 'récupération du token')
+      this.customToken = body.firebaseCustomToken
+      
+    }
+  }).bind(this));
+
+  // On échange le token avec un token d'identification
+  options = {
+    uri:"https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=AIzaSyDERcRUv900BN5lb4TIAFooo2aoqu4T32c",
+    method : 'POST',
+    json: {
+      "returnSecureToken":true,
+      "token":this.customToken
+    }
+  }
+  await this.request(options, (function (error, response, body) {
+    if (!error && response.statusCode == 200) {
+      // Sauvegarde des informations nécessaires
+      // Le token d'identification
+      this.tokenId = body.idToken
+      
+    }
+  }).bind(this));
+
+  // On se connecte au websocket
+  this.wsClient.connect(UrlWebsocket)
+  
+  // attend la connexion
+  await this._WaitForConnection()
+
+  // on envoie l'authentification
+  var oJSON = {
+      "t": "d",
+      "d": {
+          "r": this.NouveauNumeroQuestion(),
+          "a": "auth",            
+          "b": {
+              "cred": this.tokenId
+          }
+      }
+  
+  }
+  // Envoie les infos de connexion
+  this._EnvoieMessageWS(oJSON)
+
+  // Attend la réponse à la question
+  await this._WaitForAnswer(this.NumeroQuestionEnCours())
+
+  // Récupère la réponse à la question en cours
+  oJSON = JSON.parse(this.taAnswer[this.NumeroQuestionEnCours()])
+
+  // Parse des infos du compte
+  this.metaManagerId = oJSON.d.b.d.auth.metaManagerId
+  this.familyID = oJSON.d.b.d.auth.familyId
+  
+}
+NouveauNumeroQuestion()
+{
+  this.numQuestion++
+  return this.numQuestion
+}
+
+NumeroQuestionEnCours() {
+  return this.numQuestion
+}
+
+_EnvoieMessageWS(oJSON)
+{
+
+  // Vide le dernier message reçu
+  this.dernierPaquet = ''
+  // envoi d'un message
+  log('info', "Envoi du message : " + JSON.stringify(oJSON))
+  this.wsConnection.send(JSON.stringify(oJSON))
+
+}
+_ConfigureWebsocket ()
+{  
+
+  this.wsClient.on('connectFailed', (function(error) {
+    this.webSocketErreurConnexion = true;
+    log('error','Connect Error: ' + error.toString());
+    }).bind(this));
+
+  this.wsClient.on('connect', (function(connection) {
+      
+      log('debug','WebSocket Client Connected');
+      this.wsConnection = connection
+      this.webSocketConnecte = true;
+
+      connection.on('error', function(error) {
+          log('error', "Connection Error: " + error.toString());
+      });
+
+    connection.on('close', (function() {
+        log('info', 'Connection Closed');
+        this.webSocketConnecte = false;
+    }).bind(this));
+
+    connection.on('message', (function(message) {
+        if (message.type === 'utf8') {
+          log('debug', "Received: '" + message.utf8Data + "'");
+              
+            // on récupère le json
+            if (this.nbPaquetsAttendus > 0)
+            {
+              log('debug', "On attend un nombre de paquet défini, on ajoute ce paque au dernier reçu");
+              
+              // On ajoute le message reçu aux paquet reçus
+              this.dernierPaquet += message.utf8Data
+              this.nbPaquetsAttendus--
+            }else{
+              log('debug', "Pas de nombre de paquet précis attendu");
+              var oJSON = JSON.parse(message.utf8Data)
+              if (oJSON.d && ('r' in oJSON.d))
+              {
+                log('debug',"On a un numéro de question, donc on va stocker toute les réponses dans ce numéro de question")
+                 // on stocke le résultat
+                if (this.dernierPaquet == '')
+                {
+                  log('debug','Stocke le message reçu')
+                  this.taAnswer[oJSON.d.r] = message.utf8Data
+
+
+                }else{
+                  log('debug','Stocke le dernier message reçu')
+                  this.taAnswer[oJSON.d.r] = this.dernierPaquet 
+                  this.dernierPaquet = ''
+                }
+                
+              }else{
+                if (parseInt(message.utf8Data) > 0)
+                {
+                   // c'est le nombre de paquets qu'on attend
+                   this.nbPaquetsAttendus =  parseInt(message.utf8Data)
+  
+                }else{
+                  // C'est que c'est une réponse JSON directement
+                  this.dernierPaquet = message.utf8Data
+                }
+              }    
+            }
+        }
+    }).bind(this))
+
+
+}).bind(this))
+}
+//First define some delay function which is called from async function
+__delay__(timer) {
+  return new Promise(resolve => {
+      timer = timer || 2000;
+      setTimeout(function () {
+          resolve();
+      }, timer);
+  });
+};
+async _WaitForAnswer(nIDResponse)
+{
+  log('debug','Attente de la réponse ' + nIDResponse)
+  while(true)
+  {
+    if(nIDResponse in this.taAnswer)
+    {
+      log('debug','réponse trouvée')
+      break;
+    }
+    log('debug','attente 1s')
+    await this.__delay__(1000)
+  }
+}
+
+async _WaitForConnection()
+{
+  log('debug','Attente de la connexion')
+  while (this.webSocketConnecte == false)
+  {
+    if (this.webSocketErreurConnexion)
+    {  
+      log('error','Une erreur s est produite')
+      return;
+    }
+    await this.__delay__(1000)
+  }
+ 
+  log('debug','La connection est faite... : ' + this.webSocketConnecte)
+
+}
+
+async parseBills()
+{
+    var oJSON = {
+        "t": "d",
+        "d": {
+            "r": this.NouveauNumeroQuestion(),
+            "a": "q",
+            "b": {
+                "p": "/meta/" + this.metaManagerId + "/family/"+ this.familyID +"/invoice",
+                "h": ""
+            }
+        }
+    }
+
+    // Envoie la demande de factures
+    this._EnvoieMessageWS(oJSON)
+
+    // attend la réponse
+    await this._WaitForAnswer(this.NumeroQuestionEnCours())
+
+    // On a les factures
+    log('debug','Réponse reçue pour les factures : ' + this.taAnswer[this.NumeroQuestionEnCours()])
+
+    var documents = []
+
+    // Parcours des factures
+    var oJSONFactures = JSON.parse(this.taAnswer[this.NumeroQuestionEnCours()])
+    oJSONFactures = oJSONFactures.d.b.d
+    for (const IDFacture in oJSONFactures){
+      if(! oJSONFactures.hasOwnProperty(IDFacture)){
+        continue;
+      }
+
+      var oUneFacture = oJSONFactures[IDFacture]
+
+      // Est ce qu'on a une pièce jointe
+      if(! oUneFacture.hasOwnProperty('attachment')){
+        continue;
+      }
+
+      //
+      var oDocument = {
+        title: oUneFacture.body.label,
+        amount: parseInt(oUneFacture.body.totalAmountTTCCent) / 100,
+        filename: 'Facture-' + oUneFacture.body.id + '.pdf',
+        date: new Date(oUneFacture.body.invoiceDate),
+        reference: oUneFacture.body.reference,
+        fileurl: oUneFacture.attachment.url,
+
+        // the saveBills function needs a date field
+        // even if it is a little artificial here (these are not real bills)
+        currency: '€',
+        vendor: 'eTickets',
+        filename: this.normalizeFileName(
+          new Date(oUneFacture.body.invoiceDate),
+          parseInt(oUneFacture.body.totalAmountTTCCent) / 100,
+          oUneFacture.body.reference
+        ),
+        metadata: {
+          // it can be interesting that we add the date of import. This is not mandatory but may be
+          // useful for debugging or data migration
+          importDate: new Date(),
+          // document version, useful for migration after change of document structure
+          version: 1
+        }
+        
+      }
+
+      documents.push(oDocument)
+    }
+
+    return documents
+}
+
+normalizeFileName(dDate, mMontant, sReference) {
   /*2018-01-02_edf_35.50€_345234.pdf
 YYYY-MM-DD_vendor_amount.toFixed(2)currency_reference.pdf
 */
   return (
-    formatDate(dDate) + '_eTickets_' + mMontant + '€_' + sReference + '.pdf'
+    this.formatDate(dDate) + '_eTickets_' + mMontant + '€_' + sReference + '.pdf'
   )
 }
-
 // Convert a Date object to a ISO date string
-function formatDate(date) {
+formatDate(date) {
   let year = date.getFullYear()
   let month = date.getMonth() + 1
   let day = date.getDate()
@@ -213,3 +403,56 @@ function formatDate(date) {
   }
   return `${year}-${month}-${day}`
 }
+
+async parseDocuments()
+{
+
+  var oJSON = {
+        "t": "d",
+        "d": {
+            "r": this.NouveauNumeroQuestion(),
+            "a": "q",
+            "b": {
+                "p": "/meta/" + this.metaManagerId + "/family/"+ this.familyID +"/document/native",
+                "h": ""
+            }
+        }
+    }
+
+    // Envoie la demande de factures
+    this._EnvoieMessageWS(oJSON)
+
+    // attend la réponse
+    await this._WaitForAnswer(this.NumeroQuestionEnCours())
+
+    // On a les factures
+    log('debug','Réponse reçue pour les documents : ' + this.taAnswer[this.NumeroQuestionEnCours()])
+
+    var documents = []
+
+    // Parcours des factures
+    var oJSONDocuments = JSON.parse(this.taAnswer[this.NumeroQuestionEnCours()])
+    oJSONDocuments = oJSONDocuments.d.b.d
+
+    for (const Reference in oJSONDocuments){
+      if(! oJSONDocuments.hasOwnProperty(Reference)){
+        continue;
+      }
+
+      var oUnDocument = oJSONDocuments[Reference]
+
+      const pdfStream = new stream.PassThrough()
+      const filestream = request(oUnDocument.dlUrl).pipe(pdfStream)
+      documents.push({ title: oUnDocument.name, filestream: filestream, filename: oUnDocument.name + '.pdf' })
+
+    
+    }
+    return documents
+
+}
+}
+
+
+const connector = new eTicketKonnector()
+
+connector.run()

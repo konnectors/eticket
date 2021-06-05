@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "cozy-konnector-libs": "4.42.1",
-    "websocket": "^1.0.34"
+    "websocket": "1.0.34"
   },
   "devDependencies": {
     "cozy-jobs-cli": "1.16.1",

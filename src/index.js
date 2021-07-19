@@ -2,6 +2,8 @@ process.env.SENTRY_DSN =
   process.env.SENTRY_DSN ||
   'https://d66cb6d5d0f74423a877aff49f2b170a@sentry.cozycloud.cc/107'
 
+/* eslint no-constant-condition: off */
+
 const {
   BaseKonnector,
   requestFactory,
@@ -274,10 +276,10 @@ class eTicketKonnector extends BaseKonnector {
   // First define some delay function which is called from async function
   __delay__(timer) {
     return new Promise((resolve) => {
-      timer = timer || 2000
+      const _timer = timer || 2000
       setTimeout(function () {
         resolve()
-      }, timer)
+      }, _timer)
     })
   }
   async _WaitForAnswer(nIDResponse) {

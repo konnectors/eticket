@@ -9,7 +9,7 @@ const {
   requestFactory,
   saveBills,
   saveFiles,
-  log,
+  log
 } = require('cozy-konnector-libs')
 const request = requestFactory({
   // the debug mode shows all the details about http request and responses. Very useful for
@@ -21,7 +21,7 @@ const request = requestFactory({
   // default in cozy-konnector-libs
   json: false,
   // this allows request-promise to keep cookies between requests
-  jar: true,
+  jar: true
 })
 var WebSocketClient = require('websocket').client
 const stream = require('stream')
@@ -36,7 +36,7 @@ class eTicketKonnector extends BaseKonnector {
       // debug: 'json',
       cheerio: false,
       json: true,
-      jar: true,
+      jar: true
     })
     this.wsClient = new WebSocketClient()
     this.metaManagerId = '' // Identifiant client
@@ -87,7 +87,7 @@ class eTicketKonnector extends BaseKonnector {
       // this is a bank identifier which will be used to link bills to bank operations. These
       // identifiers should be at least a word found in the title of a bank operation related to this
       // bill. It is not case sensitive.
-      identifiers: ['etickets'],
+      identifiers: ['etickets']
     })
 
     // recuperation des documents divers
@@ -96,9 +96,9 @@ class eTicketKonnector extends BaseKonnector {
 
     await saveFiles(documents, fields, {
       timeout: Date.now() + 300 * 1000,
-      validateFile: function () {
+      validateFile: function() {
         return true
-      },
+      }
     })
 
     // On se déconnecte
@@ -114,13 +114,13 @@ class eTicketKonnector extends BaseKonnector {
         '&password=' +
         password +
         '&requestFirebaseCustomToken=true',
-      method: 'GET',
+      method: 'GET'
     }
 
     // On s'identifie
     await this.request(
       options,
-      function (error, response, body) {
+      function(error, response, body) {
         if (body.status == 'Success') {
           // Sauvegarde des informations nécessaires
           // Le token d'identification
@@ -132,16 +132,17 @@ class eTicketKonnector extends BaseKonnector {
 
     // On échange le token avec un token d'identification
     options = {
-      uri: 'https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=AIzaSyDERcRUv900BN5lb4TIAFooo2aoqu4T32c',
+      uri:
+        'https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=AIzaSyDERcRUv900BN5lb4TIAFooo2aoqu4T32c',
       method: 'POST',
       json: {
         returnSecureToken: true,
-        token: this.customToken,
-      },
+        token: this.customToken
+      }
     }
     await this.request(
       options,
-      function (error, response, body) {
+      function(error, response, body) {
         if (!error && response.statusCode == 200) {
           // Sauvegarde des informations nécessaires
           // Le token d'identification
@@ -163,9 +164,9 @@ class eTicketKonnector extends BaseKonnector {
         r: this.NouveauNumeroQuestion(),
         a: 'auth',
         b: {
-          cred: this.tokenId,
-        },
-      },
+          cred: this.tokenId
+        }
+      }
     }
     // Envoie les infos de connexion
     this._EnvoieMessageWS(oJSON)
@@ -199,7 +200,7 @@ class eTicketKonnector extends BaseKonnector {
   _ConfigureWebsocket() {
     this.wsClient.on(
       'connectFailed',
-      function (error) {
+      function(error) {
         this.webSocketErreurConnexion = true
         log('error', 'Connect Error: ' + error.toString())
       }.bind(this)
@@ -207,18 +208,18 @@ class eTicketKonnector extends BaseKonnector {
 
     this.wsClient.on(
       'connect',
-      function (connection) {
+      function(connection) {
         log('debug', 'WebSocket Client Connected')
         this.wsConnection = connection
         this.webSocketConnecte = true
 
-        connection.on('error', function (error) {
+        connection.on('error', function(error) {
           log('error', 'Connection Error: ' + error.toString())
         })
 
         connection.on(
           'close',
-          function () {
+          function() {
             log('info', 'Connection Closed')
             this.webSocketConnecte = false
           }.bind(this)
@@ -226,7 +227,7 @@ class eTicketKonnector extends BaseKonnector {
 
         connection.on(
           'message',
-          function (message) {
+          function(message) {
             if (message.type === 'utf8') {
               log('debug', "Received: '" + message.utf8Data + "'")
 
@@ -275,9 +276,9 @@ class eTicketKonnector extends BaseKonnector {
   }
   // First define some delay function which is called from async function
   __delay__(timer) {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const _timer = timer || 2000
-      setTimeout(function () {
+      setTimeout(function() {
         resolve()
       }, _timer)
     })
@@ -320,9 +321,9 @@ class eTicketKonnector extends BaseKonnector {
             '/family/' +
             this.familyID +
             '/invoice',
-          h: '',
-        },
-      },
+          h: ''
+        }
+      }
     }
 
     // Envoie la demande de factures
@@ -377,8 +378,8 @@ class eTicketKonnector extends BaseKonnector {
           // useful for debugging or data migration
           importDate: new Date(),
           // document version, useful for migration after change of document structure
-          version: 1,
-        },
+          version: 1
+        }
       }
 
       documents.push(oDocument)
@@ -427,9 +428,9 @@ YYYY-MM-DD_vendor_amount.toFixed(2)currency_reference.pdf
             '/family/' +
             this.familyID +
             '/document/native',
-          h: '',
-        },
-      },
+          h: ''
+        }
+      }
     }
 
     // Envoie la demande de factures
@@ -463,7 +464,7 @@ YYYY-MM-DD_vendor_amount.toFixed(2)currency_reference.pdf
       documents.push({
         title: oUnDocument.name,
         filestream: filestream,
-        filename: oUnDocument.name + '.pdf',
+        filename: oUnDocument.name + '.pdf'
       })
     }
     return documents

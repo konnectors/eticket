@@ -96,7 +96,7 @@ class eTicketKonnector extends BaseKonnector {
 
     await saveFiles(documents, fields, {
       timeout: Date.now() + 300 * 1000,
-      validateFile: function() {
+      validateFile: function () {
         return true
       }
     })
@@ -120,7 +120,7 @@ class eTicketKonnector extends BaseKonnector {
     // On s'identifie
     await this.request(
       options,
-      function(error, response, body) {
+      function (error, response, body) {
         if (body.status == 'Success') {
           // Sauvegarde des informations nécessaires
           // Le token d'identification
@@ -132,8 +132,7 @@ class eTicketKonnector extends BaseKonnector {
 
     // On échange le token avec un token d'identification
     options = {
-      uri:
-        'https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=AIzaSyDERcRUv900BN5lb4TIAFooo2aoqu4T32c',
+      uri: 'https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=AIzaSyDERcRUv900BN5lb4TIAFooo2aoqu4T32c',
       method: 'POST',
       json: {
         returnSecureToken: true,
@@ -142,7 +141,7 @@ class eTicketKonnector extends BaseKonnector {
     }
     await this.request(
       options,
-      function(error, response, body) {
+      function (error, response, body) {
         if (!error && response.statusCode == 200) {
           // Sauvegarde des informations nécessaires
           // Le token d'identification
@@ -200,7 +199,7 @@ class eTicketKonnector extends BaseKonnector {
   _ConfigureWebsocket() {
     this.wsClient.on(
       'connectFailed',
-      function(error) {
+      function (error) {
         this.webSocketErreurConnexion = true
         log('error', 'Connect Error: ' + error.toString())
       }.bind(this)
@@ -208,18 +207,18 @@ class eTicketKonnector extends BaseKonnector {
 
     this.wsClient.on(
       'connect',
-      function(connection) {
+      function (connection) {
         log('debug', 'WebSocket Client Connected')
         this.wsConnection = connection
         this.webSocketConnecte = true
 
-        connection.on('error', function(error) {
+        connection.on('error', function (error) {
           log('error', 'Connection Error: ' + error.toString())
         })
 
         connection.on(
           'close',
-          function() {
+          function () {
             log('info', 'Connection Closed')
             this.webSocketConnecte = false
           }.bind(this)
@@ -227,7 +226,7 @@ class eTicketKonnector extends BaseKonnector {
 
         connection.on(
           'message',
-          function(message) {
+          function (message) {
             if (message.type === 'utf8') {
               log('debug', "Received: '" + message.utf8Data + "'")
 
@@ -278,7 +277,7 @@ class eTicketKonnector extends BaseKonnector {
   __delay__(timer) {
     return new Promise(resolve => {
       const _timer = timer || 2000
-      setTimeout(function() {
+      setTimeout(function () {
         resolve()
       }, _timer)
     })
@@ -345,14 +344,14 @@ class eTicketKonnector extends BaseKonnector {
     var oJSONFactures = JSON.parse(this.taAnswer[this.NumeroQuestionEnCours()])
     oJSONFactures = oJSONFactures.d.b.d
     for (const IDFacture in oJSONFactures) {
-      if (!oJSONFactures.hasOwnProperty(IDFacture)) {
+      if (!Object.prototype.hasOwnProperty.call(oJSONFactures, IDFacture)) {
         continue
       }
 
       var oUneFacture = oJSONFactures[IDFacture]
 
       // Est ce qu'on a une pièce jointe
-      if (!oUneFacture.hasOwnProperty('attachment')) {
+      if (!Object.prototype.hasOwnProperty.call(oUneFacture, 'attachment')) {
         continue
       }
 
@@ -453,7 +452,7 @@ YYYY-MM-DD_vendor_amount.toFixed(2)currency_reference.pdf
     oJSONDocuments = oJSONDocuments.d.b.d
 
     for (const Reference in oJSONDocuments) {
-      if (!oJSONDocuments.hasOwnProperty(Reference)) {
+      if (!Object.prototype.hasOwnProperty.call(oJSONDocuments, Reference)) {
         continue
       }
 

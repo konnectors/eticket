@@ -1,7 +1,3 @@
-process.env.SENTRY_DSN =
-  process.env.SENTRY_DSN ||
-  'https://d66cb6d5d0f74423a877aff49f2b170a@sentry.cozycloud.cc/107'
-
 /* eslint no-constant-condition: off */
 
 const {

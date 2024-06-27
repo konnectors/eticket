@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "eTicket",
   "type": "konnector",
   "language": "node",
@@ -9,7 +9,7 @@
   "editor": "Marc Polycarpe",
   "vendor_link": "https://eticket.qiis.fr/",
   "categories": [
-    "others"
+    "finance"
   ],
   "fields": {
     "login": {
